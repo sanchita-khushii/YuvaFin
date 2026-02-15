@@ -9,7 +9,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.expense import Expense
-from app.services.auth_service import get_current_user
+from app.services.auth_service import get_current_user, get_current_user_or_upload_fallback
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 @router.get("/summary")
 def get_dashboard_summary(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_or_upload_fallback),
 ):
     """
     Returns dashboard data for CURRENT MONTH only
