@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # CORS (which websites can access the API)
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
     
+    # Dev only: allow bill/salary upload without token (uses first user in DB). Set to "true" to enable.
+    ALLOW_UPLOAD_WITHOUT_AUTH: Optional[str] = None  # "true" to allow
+    
     class Config:
         env_file = ".env"  # Load from .env file
         case_sensitive = True

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login & Upload Bill – YuvaFin</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 480px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.25rem; }
+    section { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ddd; border-radius: 8px; }
+    label { display: block; margin-top: 0.5rem; font-weight: 500; }
+    input[type="email"], input[type="password"] { width: 100%; padding: 0.5rem; box-sizing: border-box; }
+    input[type="file"] { margin-top: 0.25rem; }
+    button { margin-top: 0.75rem; padding: 0.5rem 1rem; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 6px; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    .status { margin-top: 0.5rem; font-size: 0.875rem; color: #64748b; }
+    .success { color: #15803d; }
+    .error { color: #b91c1c; }
+  </style>
+</head>
+<body>
+  <h1>Connect your account and upload bills</h1>
+  <p>Log in first. The token is stored in this page and sent automatically when you upload a bill.</p>
+
+  <section>
+    <h2>1. Login</h2>
+    <label>Email</label>
+    <input type="email" id="email" placeholder="your@email.com" />
+    <label>Password</label>
+    <input type="password" id="password" placeholder="password" />
+    <button type="button" id="btnLogin">Login</button>
+    <div id="loginStatus" class="status"></div>
+  </section>
+
+  <section>
+    <h2>2. Upload bill (requires login)</h2>
+    <label>Bill image</label>
+    <input type="file" id="billFile" accept="image/*" />
+    <button type="button" id="btnUpload" disabled>Upload bill</button>
+    <div id="uploadStatus" class="status"></div>
+  </section>
+
+  <script>
+    const API_BASE = '';  // same origin when opened via backend (e.g. http://localhost:8000)
+    let token = localStorage.getItem('yuvafin_token') || '';
+
+    function setStatus(elId, text, isError) {
+      const el = document.getElementById(elId);
+      el.textContent = text;
+      el.className = 'status ' + (isError ? 'error' : 'success');
+    }
+
+    document.getElementById('btnLogin').onclick = async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      if (!email || !password) {
+        setStatus('loginStatus', 'Enter email and password.', true);
+        return;
+      }
+      setStatus('loginStatus', 'Logging in...');
+      try {
+        const res = await fetch(API_BASE + '/api/auth/login/json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const text = await res.text();
+        let data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+        if (!res.ok) {
+          setStatus('loginStatus', data.detail || text || 'Login failed', true);
+          return;
+        }
+        token = data.access_token;
+        if (!token) {
+          setStatus('loginStatus', 'No token in response.', true);
+          return;
+        }
+        localStorage.setItem('yuvafin_token', token);
+        setStatus('loginStatus', 'Logged in. Token saved. You can upload bills.');
+        document.getElementById('btnUpload').disabled = false;
+      } catch (e) {
+        setStatus('loginStatus', 'Network error: ' + e.message, true);
+      }
+    };
+
+    document.getElementById('btnUpload').onclick = async () => {
+      const fileInput = document.getElementById('billFile');
+      if (!fileInput.files.length) {
+        setStatus('uploadStatus', 'Choose an image first.', true);
+        return;
+      }
+      if (!token) {
+        setStatus('uploadStatus', 'Login first to attach your account to the upload.', true);
+        return;
+      }
+      setStatus('uploadStatus', 'Uploading...');
+      const form = new FormData();
+      form.append('files', fileInput.files[0]);
+      try {
+        const res = await fetch(API_BASE + '/api/expenses/upload-bill', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+          body: form,
+        });
+        const text = await res.text();
+        let data;
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch (_) {
+          setStatus('uploadStatus', res.ok ? 'Invalid response from server.' : ('Error: ' + (text || res.statusText)), true);
+          return;
+        }
+        if (!res.ok) {
+          const msg = Array.isArray(data.detail) ? data.detail.map(d => d.msg || d).join(', ') : (data.detail || 'Upload failed');
+          setStatus('uploadStatus', msg, true);
+          return;
+        }
+        const who = data.saved_for_email ? ` Saved for: ${data.saved_for_email}` : '';
+        setStatus('uploadStatus', `Bill uploaded.${who} Expenses: ${JSON.stringify(data.expenses?.length || data.expenses)}`);
+      } catch (e) {
+        setStatus('uploadStatus', 'Network error: ' + e.message, true);
+      }
+    };
+
+    if (token) {
+      document.getElementById('loginStatus').textContent = 'You have a saved token. You can upload, or login again to switch user.';
+      document.getElementById('btnUpload').disabled = false;
+    }
+  </script>
+</body>
+</html>

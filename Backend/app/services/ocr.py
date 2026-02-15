@@ -1,21 +1,28 @@
-from fastapi import APIRouter, UploadFile, File
-from typing import List
+"""
+OCR service - extracts text from bill/salary images and returns structured data.
+Pure logic; no FastAPI router or in-memory DB. Routes use this and save to the database.
+"""
+
+from typing import Optional
+import re
+import io
+from datetime import datetime
 import pytesseract
 from PIL import Image
-import io
-import re
 
-router = APIRouter()
-
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
-from main import database
+# Windows: set Tesseract path if not on PATH
+try:
+    pytesseract.get_tesseract_version()
+except pytesseract.TesseractNotFoundError:
+    import sys
+    if sys.platform == "win32":
+        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
 # -------------------------
 # CATEGORY DETECTION
 # -------------------------
-def detect_category(text):
+def detect_category(text: str) -> str:
     text = text.lower()
 
     if any(word in text for word in ["restaurant", "food", "cafe", "dine"]):
@@ -33,33 +40,41 @@ def detect_category(text):
 # -------------------------
 # CLEAN NUMBER FUNCTION
 # -------------------------
-def clean_number(num_str):
+def clean_number(num_str: str) -> Optional[float]:
     num_str = num_str.replace(",", "")
     try:
         return float(num_str)
-    except:
+    except (ValueError, TypeError):
         return None
 
 
 # -------------------------
-# STRONG DATE EXTRACTION
+# DATE EXTRACTION (returns datetime or None for DB)
 # -------------------------
-def extract_date(text):
-
+def extract_date(text: str) -> Optional[datetime]:
     date_patterns = [
-        r"\b\d{2}[/-]\d{2}[/-]\d{4}\b",
-        r"\b\d{4}[/-]\d{2}[/-]\d{2}\b",
-        r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s\d{2}\s\d{4}\b",
-        r"\b\d{2}\s(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s\d{4}\b",
-        r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s\d{2}\s\d{4}\s\d{2}:\d{2}\s?(AM|PM)?\b"
+        r"\b(\d{2})[/-](\d{2})[/-](\d{4})\b",
+        r"\b(\d{4})[/-](\d{2})[/-](\d{2})\b",
+        r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s(\d{2})\s(\d{4})\b",
+        r"\b(\d{2})\s(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s(\d{4})\b",
     ]
-
     for pattern in date_patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            return match.group()
-
-    return "Not Found"
+            groups = match.groups()
+            try:
+                if len(groups) == 3:
+                    a, b, c = int(groups[0]), int(groups[1]), int(groups[2])
+                    if c > 1000:  # year last
+                        if a > 12:
+                            return datetime(c, b, a)
+                        if b > 12:
+                            return datetime(c, a, b)
+                        return datetime(c, b, a)
+                    return datetime(a, b, c)
+            except (ValueError, TypeError):
+                pass
+    return None
 
 
 # -------------------------
@@ -164,79 +179,42 @@ def extract_salary(text):
     if valid_numbers:
         return max(valid_numbers)
 
-    return 0
+    return 0.0
 
 
 # -------------------------
-# UPLOAD BILL
+# IMAGE -> TEXT (used by extract_bill_data / extract_salary_from_image)
 # -------------------------
-@router.post("/upload-bill")
-async def upload_bill(files: List[UploadFile] = File(...)):
-
-    added_expenses = []
-
-    for file in files:
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
-        image = image.convert("RGB")
-        extracted_text = pytesseract.image_to_string(image)
-
-        total_amount = extract_bill_total(extracted_text)
-        bill_date = extract_date(extracted_text)
-        category = detect_category(extracted_text)
-
-        database["expenses"].append({
-            "amount": total_amount,
-            "category": category,
-            "date": bill_date,
-            "description": file.filename
-        })
-
-        added_expenses.append({
-            "amount": total_amount,
-            "date": bill_date,
-            "category": category
-        })
-
-    total_expense = sum(item["amount"] for item in database["expenses"])
-
-    income_amount = 0
-    if database["income"] is not None:
-        income_amount = database["income"]["amount"]
-
-    savings = income_amount - total_expense
-
-    return {
-        "new_expenses_added": added_expenses,
-        "total_expense": total_expense,
-        "income": income_amount,
-        "savings": savings
-    }
-
-
-# -------------------------
-# UPLOAD SALARY
-# -------------------------
-@router.post("/upload-salary")
-async def upload_salary(file: UploadFile = File(...)):
-
-    contents = await file.read()
-    image = Image.open(io.BytesIO(contents))
+def image_bytes_to_text(image_bytes: bytes) -> str:
+    image = Image.open(io.BytesIO(image_bytes))
     image = image.convert("RGB")
-    extracted_text = pytesseract.image_to_string(image)
+    return pytesseract.image_to_string(image)
 
-    estimated_salary = extract_salary(extracted_text)
 
-    database["income"] = {
-        "amount": estimated_salary,
-        "source": "Salary Slip Upload"
-    }
-
-    total_expense = sum(item["amount"] for item in database["expenses"])
-    savings = estimated_salary - total_expense
-
+# -------------------------
+# BILL: image bytes -> structured data for DB (used by expense routes)
+# -------------------------
+def extract_bill_data(image_bytes: bytes, filename: str = "") -> dict:
+    """
+    Returns: amount, expense_date (datetime or None), category, description, ocr_text.
+    """
+    ocr_text = image_bytes_to_text(image_bytes)
+    amount = extract_bill_total(ocr_text)
+    expense_date = extract_date(ocr_text)
+    category = detect_category(ocr_text)
+    description = f"Bill upload: {filename}" if filename else "Bill upload (OCR)"
     return {
-        "detected_income": estimated_salary,
-        "total_expense": total_expense,
-        "savings": savings
+        "amount": amount,
+        "expense_date": expense_date,
+        "category": category,
+        "description": description,
+        "ocr_text": ocr_text,
     }
+
+
+# -------------------------
+# SALARY: image bytes -> amount (used by expense routes to update user.monthly_income)
+# -------------------------
+def extract_salary_from_image(image_bytes: bytes) -> float:
+    text = image_bytes_to_text(image_bytes)
+    return extract_salary(text)

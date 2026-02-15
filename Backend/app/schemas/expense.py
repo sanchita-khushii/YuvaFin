@@ -3,7 +3,7 @@ Expense schemas - define how expense data should look
 """
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime
 
 # Base schema
@@ -44,6 +44,12 @@ class DashboardSummary(BaseModel):
     savings_rate: float
     expense_by_category: dict
     monthly_trend: list
+
+# For OCR bill upload response (expenses + who they were saved for)
+class UploadBillResponse(BaseModel):
+    expenses: List[ExpenseResponse]
+    saved_for_user_id: int
+    saved_for_email: str
 
 # For AI advisor
 class AdvisorQuestion(BaseModel):

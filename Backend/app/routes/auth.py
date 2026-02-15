@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse, Token
+from app.schemas.user import UserCreate, UserResponse, UserLogin, Token, UserLogin
 from app.services.auth_service import (
     hash_password, authenticate_user, create_access_token, get_current_user
 )
@@ -49,7 +49,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
-    Login and get access token
+    Login (form body). Send: username=your@email.com&password=xxx (application/x-www-form-urlencoded).
     """
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
@@ -58,13 +58,30 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Create access token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
-    
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/login/json", response_model=Token)
+def login_json(body: UserLogin, db: Session = Depends(get_db)):
+    """
+    Login with JSON body. Send: {"email": "your@email.com", "password": "xxx"}.
+    Use this from frontends; then send the returned access_token in header: Authorization: Bearer <token>.
+    """
+    user = authenticate_user(db, body.email, body.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserResponse)
