@@ -55,3 +55,12 @@ def health_check():
     Health check endpoint
     """
     return {"status": "healthy"}
+
+from ocr import router as ocr_router
+
+# Include routers
+app.include_router(ocr_router)
+
+@app.get("/")
+def home():
+    return {"message": "Backend is working successfully!"}
