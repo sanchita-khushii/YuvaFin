@@ -155,6 +155,7 @@ export default function Dashboard() {
     { id: "wellness", name: "Financial Wellness" },
     { id: "bills", name: "Upload Bills" },
     { id: "salary", name: "Upload Salary Slip" },
+    { id: "community", name: "Community" },
     { id: "profile", name: "User Profile" },
   ];
 
@@ -250,28 +251,24 @@ export default function Dashboard() {
             <div className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm">
               <h2 className="text-2xl font-semibold mb-6">Expense Analysis</h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* 3D Pie Chart */}
+                {/* Pie Chart */}
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.6, delay: 0.2 }}
-                  className="flex justify-center items-center bg-purple-900/20 border border-purple-500/20 rounded-lg p-6"
+                  className="flex justify-center items-center bg-purple-900/20 border border-purple-500/20 rounded-lg p-4"
                 >
                   <PieChart3D data={expenseData} />
                 </motion.div>
 
                 {/* Expense Breakdown */}
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.6, delay: 0.2 }}
-                >
-                  <div className="space-y-4">
-                    <div className="mb-6">
-                      <p className="text-gray-400 text-sm mb-2">Total Expenses</p>
-                      <p className="text-4xl font-bold text-red-400">₹{totalExpenses}</p>
-                    </div>
+                <div>
+                  <div className="mb-6">
+                    <p className="text-gray-400 text-sm mb-2">Total Expenses</p>
+                    <p className="text-4xl font-bold text-red-400">₹{totalExpenses}</p>
+                  </div>
 
+                  <div className="space-y-3">
                     {expenseData.map((item, index) => {
                       const percentage = ((item.value / totalExpenses) * 100).toFixed(1);
                       const colors = [
@@ -315,95 +312,83 @@ export default function Dashboard() {
                       );
                     })}
                   </div>
-                </motion.div>
+                </div>
               </div>
             </div>
 
-            {/* Savings Bar Graph */}
+            {/* Savings Progress */}
             <div className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm">
               <h2 className="text-2xl font-semibold mb-6">Savings Progress</h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Savings Overview Stats */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.2 }}
-                >
-                  <div className="space-y-6">
-                    <div className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-6">
-                      <p className="text-gray-400 text-sm mb-2">Total Savings</p>
-                      <p className="text-4xl font-bold text-green-400 mb-2">₹25,000</p>
-                      <p className="text-gray-400 text-xs">Updated today</p>
-                    </div>
+                {/* Left Side - Stats */}
+                <div className="space-y-4">
+                  <div className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4">
+                    <p className="text-gray-400 text-xs mb-2">Total Savings</p>
+                    <p className="text-3xl font-bold text-green-400">₹25,000</p>
+                    <p className="text-gray-400 text-xs mt-1">Updated today</p>
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4">
-                        <p className="text-gray-400 text-xs mb-2">Savings Rate</p>
-                        <p className="text-2xl font-bold text-green-400">18%</p>
-                      </div>
-                      <div className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4">
-                        <p className="text-gray-400 text-xs mb-2">Monthly Target</p>
-                        <p className="text-2xl font-bold text-blue-400">₹9,000</p>
-                      </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-3">
+                      <p className="text-gray-400 text-xs mb-1">Savings Rate</p>
+                      <p className="text-2xl font-bold text-green-400">18%</p>
                     </div>
-
-                    <div className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4">
-                      <p className="text-gray-400 text-xs mb-3">Target Progress This Month</p>
-                      <div className="w-full bg-purple-900/50 rounded-full h-3">
-                        <motion.div
-                          className="h-3 rounded-full bg-gradient-to-r from-green-400 to-green-500"
-                          initial={{ width: 0 }}
-                          animate={{ width: "72%" }}
-                          transition={{ duration: 1, delay: 0.3 }}
-                        ></motion.div>
-                      </div>
-                      <p className="text-gray-400 text-xs mt-2">₹6,480 of ₹9,000</p>
+                    <div className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-3">
+                      <p className="text-gray-400 text-xs mb-1">Monthly Target</p>
+                      <p className="text-2xl font-bold text-blue-400">₹9,000</p>
                     </div>
                   </div>
-                </motion.div>
 
-                {/* Savings Bar Chart */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.4 }}
-                >
-                  <div className="bg-purple-900/20 border border-purple-500/20 rounded-lg p-6">
-                    <p className="text-sm font-semibold mb-6 text-gray-300">Monthly Savings Last 6 Months</p>
-                    <div className="flex items-end justify-between gap-2 h-48">
-                      {[
-                        { month: "Jan", amount: 3000, percentage: 50 },
-                        { month: "Feb", amount: 4500, percentage: 75 },
-                        { month: "Mar", amount: 3500, percentage: 58 },
-                        { month: "Apr", amount: 5000, percentage: 83 },
-                        { month: "May", amount: 4200, percentage: 70 },
-                        { month: "Jun", amount: 5300, percentage: 88 },
-                      ].map((data, index) => (
+                  <div className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4">
+                    <p className="text-gray-400 text-xs mb-2">Target Progress</p>
+                    <div className="w-full bg-purple-900/50 rounded-full h-2">
+                      <motion.div
+                        className="h-2 rounded-full bg-gradient-to-r from-green-400 to-green-500"
+                        initial={{ width: 0 }}
+                        animate={{ width: "72%" }}
+                        transition={{ duration: 1, delay: 0.3 }}
+                      ></motion.div>
+                    </div>
+                    <p className="text-gray-400 text-xs mt-2">₹6,480 of ₹9,000</p>
+                  </div>
+                </div>
+
+                {/* Right Side - Bar Chart */}
+                <div className="bg-purple-900/20 border border-purple-500/20 rounded-lg p-6">
+                  <p className="text-sm font-semibold mb-6 text-gray-300">Monthly Savings Last 6 Months</p>
+                  <div className="flex items-end justify-between gap-2 h-48">
+                    {[
+                      { month: "Jan", amount: Math.floor(Math.random() * 3000 + 2000), percentage: Math.floor(Math.random() * 40 + 20) },
+                      { month: "Feb", amount: Math.floor(Math.random() * 3000 + 2000), percentage: Math.floor(Math.random() * 50 + 30) },
+                      { month: "Mar", amount: Math.floor(Math.random() * 3000 + 2000), percentage: Math.floor(Math.random() * 60 + 40) },
+                      { month: "Apr", amount: Math.floor(Math.random() * 3000 + 2000), percentage: Math.floor(Math.random() * 70 + 50) },
+                      { month: "May", amount: Math.floor(Math.random() * 3000 + 2000), percentage: Math.floor(Math.random() * 80 + 60) },
+                      { month: "Jun", amount: Math.floor(Math.random() * 3000 + 2000), percentage: Math.floor(Math.random() * 90 + 70) },
+                    ].map((data, index) => (
+                      <motion.div
+                        key={data.month}
+                        className="flex flex-col items-center flex-1"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 * (index + 1) }}
+                      >
                         <motion.div
-                          key={data.month}
-                          className="flex flex-col items-center flex-1"
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.1 * (index + 1) }}
+                          className="w-full bg-gradient-to-t from-green-500 to-emerald-400 rounded-t-lg relative group"
+                          style={{ height: `${Math.min(data.percentage, 100)}%` }}
+                          initial={{ height: 0 }}
+                          animate={{ height: `${Math.min(data.percentage, 100)}%` }}
+                          transition={{ duration: 0.8, delay: 0.15 * index }}
+                          whileHover={{ boxShadow: "0 0 20px rgba(34, 197, 94, 0.5)" }}
                         >
-                          <motion.div
-                            className="w-full bg-gradient-to-t from-green-500 to-emerald-400 rounded-t-lg relative group"
-                            style={{ height: `${data.percentage}%` }}
-                            initial={{ height: 0 }}
-                            animate={{ height: `${data.percentage}%` }}
-                            transition={{ duration: 0.8, delay: 0.15 * index }}
-                            whileHover={{ boxShadow: "0 0 20px rgba(34, 197, 94, 0.5)" }}
-                          >
-                            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                              ₹{data.amount}
-                            </div>
-                          </motion.div>
-                          <p className="text-xs text-gray-400 mt-2">{data.month}</p>
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                            ₹{data.amount}
+                          </div>
                         </motion.div>
-                      ))}
-                    </div>
+                        <p className="text-xs text-gray-400 mt-2">{data.month}</p>
+                      </motion.div>
+                    ))}
                   </div>
-                </motion.div>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -624,14 +609,295 @@ export default function Dashboard() {
           </motion.div>
         )}
 
+        {/* Community Tab */}
+        {activeTab === "community" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4 }}
+            className="space-y-8"
+          >
+            {/* Comparison Statistics */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Overall Stats */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
+              >
+                <h2 className="text-2xl font-semibold mb-8">Your Performance vs Community</h2>
+
+                <div className="space-y-6">
+                  {/* Savings Rate Comparison */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-semibold text-green-400">Savings Rate</p>
+                        <p className="text-sm text-gray-400">You're in top 18%</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-green-400">18%</p>
+                        <p className="text-xs text-gray-400">vs 8% avg</p>
+                      </div>
+                    </div>
+                    <div className="w-full bg-purple-900/30 rounded-full h-3">
+                      <motion.div
+                        className="h-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-400"
+                        initial={{ width: 0 }}
+                        animate={{ width: "82%" }}
+                        transition={{ duration: 1, delay: 0.2 }}
+                      ></motion.div>
+                    </div>
+                  </motion.div>
+
+                  {/* Expense Control Comparison */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-semibold text-blue-400">Expense Control</p>
+                        <p className="text-sm text-gray-400">You're in top 45%</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-blue-400">45%</p>
+                        <p className="text-xs text-gray-400">vs 50% avg</p>
+                      </div>
+                    </div>
+                    <div className="w-full bg-purple-900/30 rounded-full h-3">
+                      <motion.div
+                        className="h-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+                        initial={{ width: 0 }}
+                        animate={{ width: "90%" }}
+                        transition={{ duration: 1, delay: 0.3 }}
+                      ></motion.div>
+                    </div>
+                  </motion.div>
+
+                  {/* Budget Hit Rate */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-semibold text-purple-400">Budget Adherence</p>
+                        <p className="text-sm text-gray-400">You're in top 72%</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-purple-400">72%</p>
+                        <p className="text-xs text-gray-400">vs 65% avg</p>
+                      </div>
+                    </div>
+                    <div className="w-full bg-purple-900/30 rounded-full h-3">
+                      <motion.div
+                        className="h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-400"
+                        initial={{ width: 0 }}
+                        animate={{ width: "72%" }}
+                        transition={{ duration: 1, delay: 0.4 }}
+                      ></motion.div>
+                    </div>
+                  </motion.div>
+
+                  {/* Financial Health Score */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-semibold text-orange-400">Financial Health Score</p>
+                        <p className="text-sm text-gray-400">You're in top 63%</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-orange-400">7.8/10</p>
+                        <p className="text-xs text-gray-400">vs 6.2/10 avg</p>
+                      </div>
+                    </div>
+                    <div className="w-full bg-purple-900/30 rounded-full h-3">
+                      <motion.div
+                        className="h-3 rounded-full bg-gradient-to-r from-orange-500 to-yellow-400"
+                        initial={{ width: 0 }}
+                        animate={{ width: "78%" }}
+                        transition={{ duration: 1, delay: 0.5 }}
+                      ></motion.div>
+                    </div>
+                  </motion.div>
+                </div>
+              </motion.div>
+
+              {/* Percentile Chart */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm flex flex-col items-center justify-center"
+              >
+                <h3 className="text-xl font-semibold mb-8">Your Percentile Rank</h3>
+                
+                {/* Circular Progress */}
+                <div className="relative w-48 h-48 mb-8">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
+                    {/* Background circle */}
+                    <circle
+                      cx="100"
+                      cy="100"
+                      r="90"
+                      fill="none"
+                      stroke="rgba(139, 92, 246, 0.2)"
+                      strokeWidth="8"
+                    />
+                    {/* Progress circle */}
+                    <motion.circle
+                      cx="100"
+                      cy="100"
+                      r="90"
+                      fill="none"
+                      stroke="url(#gradient)"
+                      strokeWidth="8"
+                      strokeDasharray="565"
+                      initial={{ strokeDashoffset: 565 }}
+                      animate={{ strokeDashoffset: 113 }}
+                      transition={{ duration: 1.5, delay: 0.3 }}
+                      strokeLinecap="round"
+                    />
+                    <defs>
+                      <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#10b981" />
+                        <stop offset="100%" stopColor="#06b6d4" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  
+                  {/* Center text */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <p className="text-4xl font-bold text-green-400">63%</p>
+                    <p className="text-sm text-gray-400">Percentile</p>
+                  </div>
+                </div>
+
+                <p className="text-center text-gray-300">
+                  You're performing better than <span className="font-bold text-green-400">63% of users</span> in your financial health and savings habits!
+                </p>
+              </motion.div>
+            </div>
+
+            {/* Category Comparison */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
+            >
+              <h3 className="text-2xl font-semibold mb-8">Category Comparison</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { name: "Food & Dining", your: 450, avg: 520, better: true },
+                  { name: "Transportation", your: 300, avg: 380, better: true },
+                  { name: "Entertainment", your: 200, avg: 290, better: true },
+                  { name: "Shopping", your: 350, avg: 420, better: true },
+                ].map((category, index) => (
+                  <motion.div
+                    key={category.name}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1 * index }}
+                    className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4"
+                  >
+                    <p className="font-semibold text-sm mb-3">{category.name}</p>
+                    
+                    <div className="space-y-2 mb-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-green-400">You</span>
+                        <span className="font-semibold">₹{category.your}</span>
+                      </div>
+                      <div className="w-full bg-purple-900/50 rounded-full h-1.5">
+                        <motion.div
+                          className="h-1.5 rounded-full bg-green-500"
+                          initial={{ width: 0 }}
+                          animate={{ width: "70%" }}
+                          transition={{ duration: 0.8, delay: 0.1 * index }}
+                        ></motion.div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Avg</span>
+                        <span className="font-semibold">₹{category.avg}</span>
+                      </div>
+                      <div className="w-full bg-purple-900/50 rounded-full h-1.5">
+                        <motion.div
+                          className="h-1.5 rounded-full bg-gray-500"
+                          initial={{ width: 0 }}
+                          animate={{ width: "85%" }}
+                          transition={{ duration: 0.8, delay: 0.15 * index }}
+                        ></motion.div>
+                      </div>
+                    </div>
+
+                    <div className={`text-center text-xs font-semibold py-2 px-2 rounded ${
+                      category.better
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-red-500/20 text-red-400"
+                    }`}>
+                      You save ₹{category.avg - category.your} per month
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Achievements */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
+              className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
+            >
+              <h3 className="text-2xl font-semibold mb-6">Your Achievements</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { icon: "🏆", title: "Budget Master", desc: "Stayed within budget for 3 months" },
+                  { icon: "💚", title: "Saver", desc: "Saved 15%+ of your income" },
+                  { icon: "📈", title: "Consistent", desc: "Logged expenses for 30 days" },
+                  { icon: "⭐", title: "Rising Star", desc: "Improved financial health by 20%" },
+                ].map((achievement, index) => (
+                  <motion.div
+                    key={achievement.title}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1 * index }}
+                    className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4 text-center hover:border-purple-400 transition-colors"
+                  >
+                    <p className="text-3xl mb-2">{achievement.icon}</p>
+                    <p className="font-semibold text-sm mb-1">{achievement.title}</p>
+                    <p className="text-xs text-gray-400">{achievement.desc}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {/* User Profile Tab */}
         {activeTab === "profile" && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4 }}
+            className="flex justify-center"
           >
-            <div className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm max-w-2xl">
+            <div className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm max-w-2xl w-full">
               <h2 className="text-2xl font-semibold mb-6">User Profile</h2>
 
               <div className="space-y-6">
