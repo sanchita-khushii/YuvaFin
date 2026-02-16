@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "browserslist": [
+    ">0.2%",
+    "not dead",
+    "not op_mini all"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -10,7 +15,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "framer-motion": "^12.34.0",
+    "framer-motion": "^11.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.0"

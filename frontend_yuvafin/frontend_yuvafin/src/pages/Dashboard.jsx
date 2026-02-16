@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import FinancialAdvisorChatbot from "../components/FinancialAdvisorChatbot";
-import { apiGet, apiPostForm } from "../apiClient";
+import { apiGet, apiPostForm, getCommunityOverview, getUserComparison, getUserComparisonByProfile } from "../apiClient";
 
 // 3D Pie Chart Component
 function PieChart3D({ data }) {
@@ -109,6 +109,10 @@ export default function Dashboard() {
   const [wellness, setWellness] = useState(null);
   const [wellnessLoading, setWellnessLoading] = useState(false);
   const [wellnessError, setWellnessError] = useState("");
+  const [communityData, setCommunityData] = useState(null);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [communityError, setCommunityError] = useState("");
+  const [userComparison, setUserComparison] = useState(null);
 
   // Sample expense data fallback (used if backend has no data yet)
   const defaultExpenseData = [
@@ -123,9 +127,9 @@ export default function Dashboard() {
   const expenseData =
     summary && summary.category_breakdown && summary.category_breakdown.length
       ? summary.category_breakdown.map((item) => ({
-          label: item.category,
-          value: item.amount,
-        }))
+        label: item.category,
+        value: item.amount,
+      }))
       : defaultExpenseData;
 
   const totalExpenses = summary
@@ -198,6 +202,113 @@ export default function Dashboard() {
     }
   }, [activeTab, wellness, wellnessLoading, navigate]);
 
+  // Load community overview when Community tab is opened
+  useEffect(() => {
+    const loadCommunityOverview = async () => {
+      if (activeTab === "community" && !communityData && !communityLoading) {
+        setCommunityLoading(true);
+        setCommunityError("");
+        try {
+          const overviewData = await getCommunityOverview();
+          setCommunityData(overviewData);
+        } catch (err) {
+          console.error("Community overview load error:", err);
+          setCommunityError(
+            err.message || "Failed to load community data. Please ensure the ML backend is running."
+          );
+        } finally {
+          setCommunityLoading(false);
+        }
+      }
+    };
+
+    loadCommunityOverview();
+  }, [activeTab, communityData, communityLoading]);
+
+  // Reset comparison when switching away from community tab
+  useEffect(() => {
+    if (activeTab !== "community") {
+      setUserComparison(null);
+    }
+  }, [activeTab]);
+
+  // Load user comparison when summary and user data are available
+  useEffect(() => {
+    const loadUserComparison = async () => {
+      console.log("loadUserComparison called. ActiveTab:", activeTab, "User:", !!user, "Summary:", !!summary);
+
+      // Only load comparison if we're on the community tab
+      if (activeTab === "community") {
+        console.log("Inside community tab check");
+
+        // Wait for user to be loaded (summary can be null/empty, that's okay)
+        // if (!user) {
+        //   return;
+        // }
+
+        // If summary doesn't exist yet, create an empty one so comparison can still run
+        const safeSummary = summary || {
+          income: 0,
+          total_expense: 0,
+          expense_count: 0
+        };
+
+        // Skip if we already have comparison data (unless it's an error we want to retry)
+        if (userComparison && !userComparison.error) {
+          console.log("Skipping: userComparison already exists", userComparison);
+          return;
+        }
+
+        try {
+          console.log("Preparing profile data...");
+          // Calculate yearly income (monthly * 12)
+          const monthlyIncome = user?.monthly_income || safeSummary.income || 0;
+          const yearlyIncome = monthlyIncome * 12;
+          const monthlyExpense = safeSummary.total_expense || 0;
+          const yearlyExpense = monthlyExpense * 12;
+
+          // Get transaction count from expenses if available
+          const transactionCount = safeSummary.expense_count || null;
+
+          // Calculate average transaction if we have expense data
+          const avgTransaction = safeSummary.expense_count > 0 && safeSummary.total_expense > 0
+            ? (safeSummary.total_expense / safeSummary.expense_count)
+            : null;
+
+          // Prepare profile data for comparison
+          // Backend will use median values if data is missing (null values)
+          const profileData = {
+            monthly_income: monthlyIncome > 0 ? monthlyIncome : null,
+            yearly_income: yearlyIncome > 0 ? yearlyIncome : null,
+            monthly_expense: monthlyExpense > 0 ? monthlyExpense : null,
+            total_expense: yearlyExpense > 0 ? yearlyExpense : null,
+            transaction_count: transactionCount,
+            avg_transaction: avgTransaction,
+          };
+
+          console.log("Fetching comparison with profile:", profileData);
+          const comparisonData = await getUserComparisonByProfile(profileData);
+          console.log("Received comparison data:", comparisonData);
+
+          // Check if the response has an error
+          if (comparisonData.error) {
+            setUserComparison({ error: comparisonData.error });
+          } else {
+            setUserComparison(comparisonData);
+          }
+        } catch (compareErr) {
+          console.error("Could not fetch user comparison:", compareErr);
+          const errorMessage = compareErr.data?.error ||
+            compareErr.message ||
+            "Please ensure you have income/expense data and the ML backend is running.";
+          setUserComparison({ error: errorMessage });
+        }
+      }
+    };
+
+    loadUserComparison();
+  }, [activeTab, summary, user]); // Note: userComparison intentionally not in deps to allow retries
+
   const handleLogout = () => {
     window.localStorage.removeItem("authToken");
     navigate("/login");
@@ -248,7 +359,7 @@ export default function Dashboard() {
       }
       setBillError(
         err.message ||
-          "Could not upload bills. Please try again with a clear image."
+        "Could not upload bills. Please try again with a clear image."
       );
     } finally {
       setBillUploading(false);
@@ -306,7 +417,7 @@ export default function Dashboard() {
       }
       setSalaryError(
         err.message ||
-          "Could not upload salary slip. Please try again with a clear image."
+        "Could not upload salary slip. Please try again with a clear image."
       );
     } finally {
       setSalaryUploading(false);
@@ -357,11 +468,10 @@ export default function Dashboard() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-4 px-2 font-semibold transition-all duration-300 relative whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? "text-purple-300"
-                    : "text-gray-400 hover:text-purple-200"
-                }`}
+                className={`py-4 px-2 font-semibold transition-all duration-300 relative whitespace-nowrap ${activeTab === tab.id
+                  ? "text-purple-300"
+                  : "text-gray-400 hover:text-purple-200"
+                  }`}
               >
                 {tab.name}
                 {activeTab === tab.id && (
@@ -487,9 +597,8 @@ export default function Dashboard() {
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-3">
                               <div
-                                className={`w-3 h-3 rounded-full ${
-                                  colors[index % colors.length]
-                                }`}
+                                className={`w-3 h-3 rounded-full ${colors[index % colors.length]
+                                  }`}
                               ></div>
                               <span className="text-gray-300">{item.label}</span>
                             </div>
@@ -497,9 +606,8 @@ export default function Dashboard() {
                           </div>
                           <div className="w-full bg-purple-900/30 rounded-full h-2 mb-3">
                             <motion.div
-                              className={`h-2 rounded-full ${
-                                colors[index % colors.length]
-                              }`}
+                              className={`h-2 rounded-full ${colors[index % colors.length]
+                                }`}
                               initial={{ width: 0 }}
                               animate={{ width: `${percentage}%` }}
                               transition={{ duration: 0.8, delay: 0.2 + index * 0.1 }}
@@ -617,9 +725,8 @@ export default function Dashboard() {
                 <h2 className="text-xl font-semibold mb-4">Savings Rate</h2>
                 <p className="text-gray-300 text-sm">
                   {wellness
-                    ? `Overall score: ${
-                        wellness.financial_wellness_score ?? "—"
-                      }/100 (${wellness.level || "—"})`
+                    ? `Overall score: ${wellness.financial_wellness_score ?? "—"
+                    }/100 (${wellness.level || "—"})`
                     : "Track how much of your income you're saving"}
                 </p>
                 {wellness && (
@@ -657,8 +764,8 @@ export default function Dashboard() {
                       ))}
                     {(!wellness.identified_risks ||
                       wellness.identified_risks.length === 0) && (
-                      <li>No major risks detected from current data.</li>
-                    )}
+                        <li>No major risks detected from current data.</li>
+                      )}
                   </ul>
                 )}
               </motion.div>
@@ -897,244 +1004,326 @@ export default function Dashboard() {
             transition={{ duration: 0.4 }}
             className="space-y-8"
           >
-            {/* Comparison Statistics */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Overall Stats */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
-              >
-                <h2 className="text-2xl font-semibold mb-8">Your Performance vs Community</h2>
-
-                <div className="space-y-6">
-                  {/* Savings Rate Comparison */}
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 }}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="font-semibold text-green-400">Savings Rate</p>
-                        <p className="text-sm text-gray-400">You're in top 18%</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-green-400">18%</p>
-                        <p className="text-xs text-gray-400">vs 8% avg</p>
-                      </div>
-                    </div>
-                    <div className="w-full bg-purple-900/30 rounded-full h-3">
-                      <motion.div
-                        className="h-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-400"
-                        initial={{ width: 0 }}
-                        animate={{ width: "82%" }}
-                        transition={{ duration: 1, delay: 0.2 }}
-                      ></motion.div>
-                    </div>
-                  </motion.div>
-
-                  {/* Expense Control Comparison */}
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 }}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="font-semibold text-blue-400">Expense Control</p>
-                        <p className="text-sm text-gray-400">You're in top 45%</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-blue-400">45%</p>
-                        <p className="text-xs text-gray-400">vs 50% avg</p>
-                      </div>
-                    </div>
-                    <div className="w-full bg-purple-900/30 rounded-full h-3">
-                      <motion.div
-                        className="h-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
-                        initial={{ width: 0 }}
-                        animate={{ width: "90%" }}
-                        transition={{ duration: 1, delay: 0.3 }}
-                      ></motion.div>
-                    </div>
-                  </motion.div>
-
-                  {/* Budget Hit Rate */}
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 }}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="font-semibold text-purple-400">Budget Adherence</p>
-                        <p className="text-sm text-gray-400">You're in top 72%</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-purple-400">72%</p>
-                        <p className="text-xs text-gray-400">vs 65% avg</p>
-                      </div>
-                    </div>
-                    <div className="w-full bg-purple-900/30 rounded-full h-3">
-                      <motion.div
-                        className="h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-400"
-                        initial={{ width: 0 }}
-                        animate={{ width: "72%" }}
-                        transition={{ duration: 1, delay: 0.4 }}
-                      ></motion.div>
-                    </div>
-                  </motion.div>
-
-                  {/* Financial Health Score */}
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.4 }}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="font-semibold text-orange-400">Financial Health Score</p>
-                        <p className="text-sm text-gray-400">You're in top 63%</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-orange-400">7.8/10</p>
-                        <p className="text-xs text-gray-400">vs 6.2/10 avg</p>
-                      </div>
-                    </div>
-                    <div className="w-full bg-purple-900/30 rounded-full h-3">
-                      <motion.div
-                        className="h-3 rounded-full bg-gradient-to-r from-orange-500 to-yellow-400"
-                        initial={{ width: 0 }}
-                        animate={{ width: "78%" }}
-                        transition={{ duration: 1, delay: 0.5 }}
-                      ></motion.div>
-                    </div>
-                  </motion.div>
+            {communityLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400 mx-auto mb-4"></div>
+                  <p className="text-gray-400">Loading community data...</p>
                 </div>
-              </motion.div>
-
-              {/* Percentile Chart */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm flex flex-col items-center justify-center"
-              >
-                <h3 className="text-xl font-semibold mb-8">Your Percentile Rank</h3>
-                
-                {/* Circular Progress */}
-                <div className="relative w-48 h-48 mb-8">
-                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
-                    {/* Background circle */}
-                    <circle
-                      cx="100"
-                      cy="100"
-                      r="90"
-                      fill="none"
-                      stroke="rgba(139, 92, 246, 0.2)"
-                      strokeWidth="8"
-                    />
-                    {/* Progress circle */}
-                    <motion.circle
-                      cx="100"
-                      cy="100"
-                      r="90"
-                      fill="none"
-                      stroke="url(#gradient)"
-                      strokeWidth="8"
-                      strokeDasharray="565"
-                      initial={{ strokeDashoffset: 565 }}
-                      animate={{ strokeDashoffset: 113 }}
-                      transition={{ duration: 1.5, delay: 0.3 }}
-                      strokeLinecap="round"
-                    />
-                    <defs>
-                      <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#10b981" />
-                        <stop offset="100%" stopColor="#06b6d4" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                  
-                  {/* Center text */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <p className="text-4xl font-bold text-green-400">63%</p>
-                    <p className="text-sm text-gray-400">Percentile</p>
-                  </div>
-                </div>
-
-                <p className="text-center text-gray-300">
-                  You're performing better than <span className="font-bold text-green-400">63% of users</span> in your financial health and savings habits!
-                </p>
-              </motion.div>
-            </div>
-
-            {/* Category Comparison */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
-            >
-              <h3 className="text-2xl font-semibold mb-8">Category Comparison</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { name: "Food & Dining", your: 450, avg: 520, better: true },
-                  { name: "Transportation", your: 300, avg: 380, better: true },
-                  { name: "Entertainment", your: 200, avg: 290, better: true },
-                  { name: "Shopping", your: 350, avg: 420, better: true },
-                ].map((category, index) => (
-                  <motion.div
-                    key={category.name}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.1 * index }}
-                    className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4"
-                  >
-                    <p className="font-semibold text-sm mb-3">{category.name}</p>
-                    
-                    <div className="space-y-2 mb-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-green-400">You</span>
-                        <span className="font-semibold">₹{category.your}</span>
-                      </div>
-                      <div className="w-full bg-purple-900/50 rounded-full h-1.5">
-                        <motion.div
-                          className="h-1.5 rounded-full bg-green-500"
-                          initial={{ width: 0 }}
-                          animate={{ width: "70%" }}
-                          transition={{ duration: 0.8, delay: 0.1 * index }}
-                        ></motion.div>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-400">Avg</span>
-                        <span className="font-semibold">₹{category.avg}</span>
-                      </div>
-                      <div className="w-full bg-purple-900/50 rounded-full h-1.5">
-                        <motion.div
-                          className="h-1.5 rounded-full bg-gray-500"
-                          initial={{ width: 0 }}
-                          animate={{ width: "85%" }}
-                          transition={{ duration: 0.8, delay: 0.15 * index }}
-                        ></motion.div>
-                      </div>
-                    </div>
-
-                    <div className={`text-center text-xs font-semibold py-2 px-2 rounded ${
-                      category.better
-                        ? "bg-green-500/20 text-green-400"
-                        : "bg-red-500/20 text-red-400"
-                    }`}>
-                      You save ₹{category.avg - category.your} per month
-                    </div>
-                  </motion.div>
-                ))}
               </div>
-            </motion.div>
+            ) : communityError ? (
+              <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-6 text-center">
+                <p className="text-red-400 font-semibold mb-2">Error Loading Community Data</p>
+                <p className="text-gray-400 text-sm">{communityError}</p>
+                <p className="text-gray-500 text-xs mt-2">Make sure the ML backend is running on http://localhost:8000</p>
+              </div>
+            ) : (
+              <>
+                {/* Community Overview Stats */}
+                {communityData && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+                  >
+                    <div className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-6 backdrop-blur-sm">
+                      <p className="text-gray-400 text-sm mb-2">Total Users</p>
+                      <p className="text-3xl font-bold text-purple-300">{communityData.total_users?.toLocaleString() || 0}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-6 backdrop-blur-sm">
+                      <p className="text-gray-400 text-sm mb-2">Avg Credit Score</p>
+                      <p className="text-3xl font-bold text-green-300">{communityData.average_credit_score || 0}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-6 backdrop-blur-sm">
+                      <p className="text-gray-400 text-sm mb-2">Avg Debt Ratio</p>
+                      <p className="text-3xl font-bold text-orange-300">{communityData.average_debt_ratio || 0}%</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-6 backdrop-blur-sm">
+                      <p className="text-gray-400 text-sm mb-2">Top Cluster</p>
+                      <p className="text-3xl font-bold text-blue-300">#{communityData.top_performing_cluster_by_credit_score || 0}</p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Cluster Distribution */}
+                {communityData?.cluster_distribution && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm mb-8"
+                  >
+                    <h3 className="text-2xl font-semibold mb-6">Cluster Distribution</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {Object.entries(communityData.cluster_distribution).map(([cluster, count]) => (
+                        <div key={cluster} className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4 text-center">
+                          <p className="text-2xl font-bold text-purple-300 mb-1">{count}</p>
+                          <p className="text-sm text-gray-400">Cluster {cluster}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Comparison Statistics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* COMPARISON SECTION */}
+                  {activeTab === "community" && !userComparison && (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent mb-4"></div>
+                      <p className="text-gray-400">Loading community comparison...</p>
+                    </div>
+                  )}
+
+                  {userComparison && !userComparison.error ? (
+                    // Show comparison data
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.6 }}
+                      className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
+                    >
+                      <h2 className="text-2xl font-semibold mb-4">
+                        Your Performance vs {userComparison.persona || `Cluster ${userComparison.cluster}`}
+                      </h2>
+                      <p className="text-sm text-gray-400 mb-6">
+                        You're in a cluster with {userComparison.peer_count} peers
+                        {userComparison.matched_client_id && (
+                          <span className="text-xs text-gray-500 ml-2">
+                            (Matched to client #{userComparison.matched_client_id})
+                          </span>
+                        )}
+                      </p>
+
+                      <div className="space-y-6">
+                        {userComparison.comparison && Object.entries(userComparison.comparison).map(([metric, data], index) => {
+                          const percentile = userComparison.percentile_rankings?.[metric] || 0;
+                          const isAbove = data.difference_percent > 10;
+                          const isBelow = data.difference_percent < -10;
+                          const colorClass = isAbove ? "text-green-400" : isBelow ? "text-red-400" : "text-yellow-400";
+                          const bgGradient = isAbove
+                            ? "bg-gradient-to-r from-green-500 to-emerald-400"
+                            : isBelow
+                              ? "bg-gradient-to-r from-red-500 to-orange-400"
+                              : "bg-gradient-to-r from-yellow-500 to-orange-400";
+
+                          return (
+                            <motion.div
+                              key={metric}
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: 0.1 * index }}
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <div>
+                                  <p className={`font-semibold ${colorClass}`}>
+                                    {metric.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
+                                  </p>
+                                  <p className="text-sm text-gray-400">
+                                    {data.performance_status} ({percentile.toFixed(1)}% percentile)
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className={`text-2xl font-bold ${colorClass}`}>{data.user_value}</p>
+                                  <p className="text-xs text-gray-400">vs {data.cluster_average} avg</p>
+                                </div>
+                              </div>
+                              <div className="w-full bg-purple-900/30 rounded-full h-3">
+                                <motion.div
+                                  className={`h-3 rounded-full ${bgGradient}`}
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${Math.min(100, Math.max(0, percentile))}%` }}
+                                  transition={{ duration: 1, delay: 0.2 + 0.1 * index }}
+                                ></motion.div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  ) : userComparison?.error ? (
+                    // Show error message
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
+                    >
+                      <h2 className="text-2xl font-semibold mb-4">Your Performance vs Community</h2>
+                      <div className="space-y-2">
+                        <p className="text-red-400 font-semibold">Comparison Error:</p>
+                        <p className="text-gray-400">{userComparison.error}</p>
+                        <p className="text-xs text-gray-500 mt-4">
+                          Check the browser console (F12) for more details.
+                        </p>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    // Show loading/not available message
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
+                    >
+                      <h2 className="text-2xl font-semibold mb-4">Your Performance vs Community</h2>
+                      <div className="space-y-4">
+                        <p className="text-gray-400">
+                          {summary && user ? "Loading comparison..." : "User comparison data is not available yet."}
+                        </p>
+                        {(!summary || !user) && (
+                          <>
+                            <p className="text-sm text-gray-500 mt-2">
+                              To see your comparison:
+                            </p>
+                            <ul className="text-sm text-gray-500 list-disc list-inside mt-2 space-y-1">
+                              <li>Make sure you are logged in</li>
+                              <li>Make sure you have uploaded your salary slip</li>
+                              <li>Add some expenses/bills to your account</li>
+                              <li>Ensure the ML backend is running on port 8000</li>
+                            </ul>
+                          </>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Percentile Chart */}
+                  {userComparison?.percentile_rankings && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.6, delay: 0.2 }}
+                      className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm flex flex-col items-center justify-center"
+                    >
+                      <h3 className="text-xl font-semibold mb-8">Your Average Percentile Rank</h3>
+
+                      {(() => {
+                        const percentiles = Object.values(userComparison.percentile_rankings);
+                        const avgPercentile = percentiles.reduce((a, b) => a + b, 0) / percentiles.length;
+                        const strokeDashoffset = 565 - (avgPercentile / 100) * 565;
+
+                        return (
+                          <>
+                            {/* Circular Progress */}
+                            <div className="relative w-48 h-48 mb-8">
+                              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
+                                {/* Background circle */}
+                                <circle
+                                  cx="100"
+                                  cy="100"
+                                  r="90"
+                                  fill="none"
+                                  stroke="rgba(139, 92, 246, 0.2)"
+                                  strokeWidth="8"
+                                />
+                                {/* Progress circle */}
+                                <motion.circle
+                                  cx="100"
+                                  cy="100"
+                                  r="90"
+                                  fill="none"
+                                  stroke="url(#gradient)"
+                                  strokeWidth="8"
+                                  strokeDasharray="565"
+                                  initial={{ strokeDashoffset: 565 }}
+                                  animate={{ strokeDashoffset }}
+                                  transition={{ duration: 1.5, delay: 0.3 }}
+                                  strokeLinecap="round"
+                                />
+                                <defs>
+                                  <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stopColor="#10b981" />
+                                    <stop offset="100%" stopColor="#06b6d4" />
+                                  </linearGradient>
+                                </defs>
+                              </svg>
+
+                              {/* Center text */}
+                              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <p className="text-4xl font-bold text-green-400">{avgPercentile.toFixed(1)}%</p>
+                                <p className="text-sm text-gray-400">Percentile</p>
+                              </div>
+                            </div>
+
+                            <p className="text-center text-gray-300">
+                              You're performing better than <span className="font-bold text-green-400">{avgPercentile.toFixed(1)}% of users</span> in your cluster!
+                            </p>
+                          </>
+                        );
+                      })()}
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* Category Comparison - Using summary data if available */}
+                {summary && summary.category_breakdown && summary.category_breakdown.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.4 }}
+                    className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
+                  >
+                    <h3 className="text-2xl font-semibold mb-8">Category Comparison</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {summary.category_breakdown.slice(0, 4).map((category, index) => {
+                        // Calculate average (simplified - you might want to get this from backend)
+                        const avgAmount = category.amount * 1.15; // Approximate average
+                        const better = category.amount < avgAmount;
+
+                        return (
+                          <motion.div
+                            key={category.category}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.1 * index }}
+                            className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-4"
+                          >
+                            <p className="font-semibold text-sm mb-3">{category.category}</p>
+
+                            <div className="space-y-2 mb-3">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-green-400">You</span>
+                                <span className="font-semibold">{formatCurrency(category.amount)}</span>
+                              </div>
+                              <div className="w-full bg-purple-900/50 rounded-full h-1.5">
+                                <motion.div
+                                  className="h-1.5 rounded-full bg-green-500"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${Math.min(100, (category.amount / avgAmount) * 100)}%` }}
+                                  transition={{ duration: 0.8, delay: 0.1 * index }}
+                                ></motion.div>
+                              </div>
+
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-400">Est. Avg</span>
+                                <span className="font-semibold">{formatCurrency(avgAmount)}</span>
+                              </div>
+                              <div className="w-full bg-purple-900/50 rounded-full h-1.5">
+                                <motion.div
+                                  className="h-1.5 rounded-full bg-gray-500"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: "85%" }}
+                                  transition={{ duration: 0.8, delay: 0.15 * index }}
+                                ></motion.div>
+                              </div>
+                            </div>
+
+                            <div className={`text-center text-xs font-semibold py-2 px-2 rounded ${better
+                              ? "bg-green-500/20 text-green-400"
+                              : "bg-red-500/20 text-red-400"
+                              }`}>
+                              {better
+                                ? `You save ${formatCurrency(avgAmount - category.amount)} vs avg`
+                                : `Above avg by ${formatCurrency(category.amount - avgAmount)}`
+                              }
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </>
+            )}
 
             {/* Achievements */}
             <motion.div
@@ -1144,7 +1333,7 @@ export default function Dashboard() {
               className="bg-gradient-to-br from-purple-800/40 to-indigo-800/40 border border-purple-500/30 rounded-xl p-8 backdrop-blur-sm"
             >
               <h3 className="text-2xl font-semibold mb-6">Your Achievements</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
                   { icon: "🏆", title: "Budget Master", desc: "Stayed within budget for 3 months" },
