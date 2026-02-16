@@ -17,8 +17,8 @@
     .status { margin-top: 0.5rem; font-size: 0.875rem; color: #64748b; }
     .success { color: #15803d; }
     .error { color: #b91c1c; }
-    #dashboardSummary { margin-top: 0.75rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-size: 0.9rem; white-space: pre-wrap; }
-    #dashboardSummary:empty { display: none; }
+    #dashboardSummary, #wellnessSummary { margin-top: 0.75rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-size: 0.9rem; white-space: pre-wrap; max-height: 20rem; overflow: auto; }
+    #dashboardSummary:empty, #wellnessSummary:empty { display: none; }
   </style>
 </head>
 <body>
@@ -44,11 +44,28 @@
   </section>
 
   <section>
-    <h2>3. Dashboard (current month)</h2>
+    <h2>3. Upload salary slip</h2>
+    <p>Upload a salary slip image to set your monthly income (OCR extracts the amount).</p>
+    <label>Salary slip image</label>
+    <input type="file" id="salaryFile" accept="image/*" />
+    <button type="button" id="btnSalary" disabled>Upload salary slip</button>
+    <div id="salaryStatus" class="status"></div>
+  </section>
+
+  <section>
+    <h2>4. Dashboard (current month)</h2>
     <p>Load summary for the logged-in user: income, expenses, savings, category breakdown.</p>
     <button type="button" id="btnDashboard" class="secondary" disabled>Load dashboard</button>
     <div id="dashboardStatus" class="status"></div>
     <pre id="dashboardSummary"></pre>
+  </section>
+
+  <section>
+    <h2>5. Wellness score (AI analysis)</h2>
+    <p>Get AI-driven financial wellness analysis and score. Upload salary + some expenses first for better results.</p>
+    <button type="button" id="btnWellness" class="secondary" disabled>Load wellness analysis</button>
+    <div id="wellnessStatus" class="status"></div>
+    <pre id="wellnessSummary"></pre>
   </section>
 
   <script>
@@ -88,9 +105,11 @@
           return;
         }
         localStorage.setItem('yuvafin_token', token);
-        setStatus('loginStatus', 'Logged in. Token saved. You can upload bills and load the dashboard.');
+        setStatus('loginStatus', 'Logged in. Token saved. You can upload bills, salary slip, and load dashboard & wellness.');
         document.getElementById('btnUpload').disabled = false;
+        document.getElementById('btnSalary').disabled = false;
         document.getElementById('btnDashboard').disabled = false;
+        document.getElementById('btnWellness').disabled = false;
       } catch (e) {
         setStatus('loginStatus', 'Network error: ' + e.message, true);
       }
@@ -135,6 +154,38 @@
       }
     };
 
+    document.getElementById('btnSalary').onclick = async () => {
+      const fileInput = document.getElementById('salaryFile');
+      if (!fileInput.files.length) {
+        setStatus('salaryStatus', 'Choose a salary slip image first.', true);
+        return;
+      }
+      if (!token) {
+        setStatus('salaryStatus', 'Login first.', true);
+        return;
+      }
+      setStatus('salaryStatus', 'Uploading...');
+      const form = new FormData();
+      form.append('file', fileInput.files[0]);
+      try {
+        const res = await fetch(API_BASE + '/api/expenses/upload-salary', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+          body: form,
+        });
+        const text = await res.text();
+        let data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+        if (!res.ok) {
+          setStatus('salaryStatus', data.detail || text || 'Upload failed', true);
+          return;
+        }
+        setStatus('salaryStatus', 'Salary slip uploaded. Income: ' + (data.detected_income != null ? data.detected_income : '—') + ', Savings: ' + (data.savings != null ? data.savings : '—'));
+      } catch (e) {
+        setStatus('salaryStatus', 'Network error: ' + e.message, true);
+      }
+    };
+
     document.getElementById('btnDashboard').onclick = async () => {
       if (!token) {
         setStatus('dashboardStatus', 'Login first.', true);
@@ -175,10 +226,54 @@
       }
     };
 
+    document.getElementById('btnWellness').onclick = async () => {
+      if (!token) {
+        setStatus('wellnessStatus', 'Login first.', true);
+        return;
+      }
+      setStatus('wellnessStatus', 'Loading...');
+      document.getElementById('wellnessSummary').textContent = '';
+      try {
+        const res = await fetch(API_BASE + '/api/wellness/analysis', {
+          method: 'GET',
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        const text = await res.text();
+        let data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+        if (!res.ok) {
+          setStatus('wellnessStatus', data.detail || text || 'Failed to load wellness', true);
+          return;
+        }
+        setStatus('wellnessStatus', 'Wellness analysis loaded.');
+        if (data.error) {
+          document.getElementById('wellnessSummary').textContent = 'Error: ' + data.error + (data.details ? '\n' + data.details : '');
+          return;
+        }
+        const lines = [
+          'Score: ' + (data.financial_wellness_score != null ? data.financial_wellness_score : '—') + ' / 100',
+          'Level: ' + (data.level || '—'),
+          'Stress index: ' + (data.financial_stress_index || '—'),
+          'Risk profile: ' + (data.risk_profile || '—'),
+          '',
+          'Summary: ' + (data.analysis_summary || '—'),
+          '',
+          'Risks: ' + (Array.isArray(data.identified_risks) ? data.identified_risks.join('; ') : '—'),
+          '',
+          'Short-term actions: ' + (Array.isArray(data.short_term_action_plan) ? data.short_term_action_plan.join('; ') : '—'),
+        ];
+        document.getElementById('wellnessSummary').textContent = lines.join('\n');
+      } catch (e) {
+        setStatus('wellnessStatus', 'Network error: ' + e.message, true);
+      }
+    };
+
     if (token) {
-      document.getElementById('loginStatus').textContent = 'You have a saved token. You can upload, load dashboard, or login again to switch user.';
+      document.getElementById('loginStatus').textContent = 'You have a saved token. You can upload bills/salary, load dashboard & wellness, or login again.';
       document.getElementById('btnUpload').disabled = false;
+      document.getElementById('btnSalary').disabled = false;
       document.getElementById('btnDashboard').disabled = false;
+      document.getElementById('btnWellness').disabled = false;
     }
   </script>
 </body>
