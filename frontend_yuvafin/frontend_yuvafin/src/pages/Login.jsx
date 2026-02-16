@@ -1,6 +1,7 @@
 // src/pages/Login.jsx
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -13,6 +14,7 @@ export default function Login() {
     fullName: "",
     age: "",
   });
+  const navigate = useNavigate();
 
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -21,6 +23,7 @@ export default function Login() {
     e.preventDefault();
     const endpoint = isLogin ? "/api/auth/login" : "/api/auth/signup";
 
+    // Attempt API call but redirect regardless
     try {
       const res = await fetch(endpoint, {
         method: "POST",
@@ -31,6 +34,13 @@ export default function Login() {
       console.log(data);
     } catch (err) {
       console.error("Auth error:", err);
+    }
+
+    // Navigate based on login/signup after form submission
+    if (isLogin) {
+      navigate("/dashboard");
+    } else {
+      navigate("/onboarding");
     }
   };
 
