@@ -207,4 +207,3 @@ def financial_wellness_analysis(
             "error": "AI request failed",
             "details": str(e)
         }
-
