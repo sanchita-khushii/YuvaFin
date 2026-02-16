@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import FinancialAdvisorChatbot from "../components/FinancialAdvisorChatbot";
+import { apiGet, apiPostForm } from "../apiClient";
 
 // 3D Pie Chart Component
 function PieChart3D({ data }) {
@@ -95,47 +96,224 @@ export default function Dashboard() {
   const [uploadedSalary, setUploadedSalary] = useState([]);
   const billsFileInputRef = useRef(null);
   const salaryFileInputRef = useRef(null);
+  const [summary, setSummary] = useState(null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [billUploading, setBillUploading] = useState(false);
+  const [billMessage, setBillMessage] = useState("");
+  const [billError, setBillError] = useState("");
+  const [salaryUploading, setSalaryUploading] = useState(false);
+  const [salaryMessage, setSalaryMessage] = useState("");
+  const [salaryError, setSalaryError] = useState("");
+  const [wellness, setWellness] = useState(null);
+  const [wellnessLoading, setWellnessLoading] = useState(false);
+  const [wellnessError, setWellnessError] = useState("");
 
-  // Sample expense data (will be replaced by backend data later)
-  const [expenseData] = useState([
+  // Sample expense data fallback (used if backend has no data yet)
+  const defaultExpenseData = [
     { label: "Food & Dining", value: 450 },
     { label: "Transportation", value: 300 },
     { label: "Entertainment", value: 200 },
     { label: "Utilities", value: 250 },
     { label: "Shopping", value: 350 },
     { label: "Other", value: 150 },
-  ]);
+  ];
+
+  const expenseData =
+    summary && summary.category_breakdown && summary.category_breakdown.length
+      ? summary.category_breakdown.map((item) => ({
+          label: item.category,
+          value: item.amount,
+        }))
+      : defaultExpenseData;
+
+  const totalExpenses = summary
+    ? summary.total_expense
+    : expenseData.reduce((sum, item) => sum + item.value, 0);
+
+  const formatCurrency = (value) =>
+    typeof value === "number"
+      ? `₹${value.toLocaleString("en-IN")}`
+      : "₹—";
+
+  useEffect(() => {
+    const loadDashboard = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [summaryData, userData] = await Promise.all([
+          apiGet("/api/dashboard/summary"),
+          apiGet("/api/auth/me"),
+        ]);
+        setSummary(summaryData);
+        setUser(userData);
+      } catch (err) {
+        console.error("Dashboard load error:", err);
+        if (err.status === 401) {
+          window.localStorage.removeItem("authToken");
+          navigate("/login");
+          return;
+        }
+        setError(err.message || "Failed to load dashboard data.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboard();
+  }, [navigate]);
+
+  // Load financial wellness analysis when the Wellness tab is opened
+  useEffect(() => {
+    const loadWellness = async () => {
+      setWellnessLoading(true);
+      setWellnessError("");
+      try {
+        const data = await apiGet("/api/wellness/analysis");
+        if (data && data.error) {
+          // Logical error from backend (e.g. "Please upload salary first.")
+          setWellness(null);
+          setWellnessError(data.error);
+        } else {
+          setWellness(data);
+        }
+      } catch (err) {
+        console.error("Wellness analysis load error:", err);
+        if (err.status === 401) {
+          window.localStorage.removeItem("authToken");
+          navigate("/login");
+          return;
+        }
+        setWellnessError(
+          err.message || "Failed to load financial wellness analysis."
+        );
+      } finally {
+        setWellnessLoading(false);
+      }
+    };
+
+    if (activeTab === "wellness" && !wellness && !wellnessLoading) {
+      loadWellness();
+    }
+  }, [activeTab, wellness, wellnessLoading, navigate]);
 
   const handleLogout = () => {
+    window.localStorage.removeItem("authToken");
     navigate("/login");
   };
 
-  // Handle bill uploads
-  const handleBillUpload = (e) => {
-    const files = Array.from(e.target.files);
-    files.forEach((file) => {
-      const fileData = {
+  // Handle bill uploads - sends images to /api/expenses/upload-bill (OCR + DB save)
+  const handleBillUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setBillError("");
+    setBillMessage("");
+    setBillUploading(true);
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => {
+        formData.append("files", file);
+      });
+
+      const response = await apiPostForm("/api/expenses/upload-bill", formData);
+
+      const newPreviews = files.map((file) => ({
         id: Date.now() + Math.random(),
         name: file.name,
         preview: URL.createObjectURL(file),
         size: (file.size / 1024).toFixed(2),
-      };
-      setUploadedBills([...uploadedBills, fileData]);
-    });
+      }));
+      setUploadedBills((prev) => [...prev, ...newPreviews]);
+
+      setBillMessage(
+        `Processed ${response.expenses.length} bill(s) and saved to your account.`
+      );
+
+      // Refresh dashboard summary so charts reflect new expenses
+      try {
+        const summaryData = await apiGet("/api/dashboard/summary");
+        setSummary(summaryData);
+      } catch (innerErr) {
+        console.error("Failed to refresh summary after bill upload:", innerErr);
+      }
+    } catch (err) {
+      console.error("Bill upload error:", err);
+      if (err.status === 401) {
+        window.localStorage.removeItem("authToken");
+        navigate("/login");
+        return;
+      }
+      setBillError(
+        err.message ||
+          "Could not upload bills. Please try again with a clear image."
+      );
+    } finally {
+      setBillUploading(false);
+      if (billsFileInputRef.current) {
+        billsFileInputRef.current.value = "";
+      }
+    }
   };
 
-  // Handle salary slip uploads
-  const handleSalaryUpload = (e) => {
-    const files = Array.from(e.target.files);
-    files.forEach((file) => {
+  // Handle salary slip uploads - sends image to /api/expenses/upload-salary (OCR + update income)
+  const handleSalaryUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    const file = files[0];
+    if (!file) return;
+
+    setSalaryError("");
+    setSalaryMessage("");
+    setSalaryUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await apiPostForm(
+        "/api/expenses/upload-salary",
+        formData
+      );
+
       const fileData = {
         id: Date.now() + Math.random(),
         name: file.name,
         preview: URL.createObjectURL(file),
         size: (file.size / 1024).toFixed(2),
       };
-      setUploadedSalary([...uploadedSalary, fileData]);
-    });
+      setUploadedSalary((prev) => [...prev, fileData]);
+
+      setSalaryMessage(response.message || "Salary slip processed successfully.");
+
+      // Refresh dashboard summary so income/savings reflect new salary
+      try {
+        const summaryData = await apiGet("/api/dashboard/summary");
+        setSummary(summaryData);
+      } catch (innerErr) {
+        console.error(
+          "Failed to refresh summary after salary upload:",
+          innerErr
+        );
+      }
+    } catch (err) {
+      console.error("Salary upload error:", err);
+      if (err.status === 401) {
+        window.localStorage.removeItem("authToken");
+        navigate("/login");
+        return;
+      }
+      setSalaryError(
+        err.message ||
+          "Could not upload salary slip. Please try again with a clear image."
+      );
+    } finally {
+      setSalaryUploading(false);
+      if (salaryFileInputRef.current) {
+        salaryFileInputRef.current.value = "";
+      }
+    }
   };
 
   const removeBill = (id) => {
@@ -145,9 +323,6 @@ export default function Dashboard() {
   const removeSalary = (id) => {
     setUploadedSalary(uploadedSalary.filter((salary) => salary.id !== id));
   };
-
-  // Calculate total expenses
-  const totalExpenses = expenseData.reduce((sum, item) => sum + item.value, 0);
 
   // Tab configuration
   const tabs = [
@@ -209,6 +384,14 @@ export default function Dashboard() {
         transition={{ duration: 0.6 }}
         className="max-w-7xl mx-auto px-4 py-12"
       >
+        {loading && (
+          <p className="text-center text-gray-300 mb-6">
+            Loading your dashboard...
+          </p>
+        )}
+        {error && (
+          <p className="text-center text-red-400 mb-6">{error}</p>
+        )}
         {/* Home Tab */}
         {activeTab === "home" && (
           <motion.div
@@ -226,23 +409,35 @@ export default function Dashboard() {
                   whileHover={{ scale: 1.05 }}
                 >
                   <p className="text-gray-400 text-sm mb-2">Monthly Income</p>
-                  <p className="text-3xl font-bold text-green-400">₹50,000</p>
+                  <p className="text-3xl font-bold text-green-400">
+                    {formatCurrency(
+                      summary?.income ?? user?.monthly_income ?? null
+                    )}
+                  </p>
                 </motion.div>
 
                 <motion.div
                   className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-6 text-center"
                   whileHover={{ scale: 1.05 }}
                 >
-                  <p className="text-gray-400 text-sm mb-2">Year to Date</p>
-                  <p className="text-3xl font-bold text-blue-400">₹5,50,000</p>
+                  <p className="text-gray-400 text-sm mb-2">
+                    Current Month Expenses
+                  </p>
+                  <p className="text-3xl font-bold text-blue-400">
+                    {formatCurrency(summary?.total_expense ?? null)}
+                  </p>
                 </motion.div>
 
                 <motion.div
                   className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-6 text-center"
                   whileHover={{ scale: 1.05 }}
                 >
-                  <p className="text-gray-400 text-sm mb-2">Average Income</p>
-                  <p className="text-3xl font-bold text-purple-400">₹45,833</p>
+                  <p className="text-gray-400 text-sm mb-2">
+                    Current Month Savings
+                  </p>
+                  <p className="text-3xl font-bold text-purple-400">
+                    {formatCurrency(summary?.savings ?? null)}
+                  </p>
                 </motion.div>
               </div>
             </div>
@@ -265,7 +460,9 @@ export default function Dashboard() {
                 <div>
                   <div className="mb-6">
                     <p className="text-gray-400 text-sm mb-2">Total Expenses</p>
-                    <p className="text-4xl font-bold text-red-400">₹{totalExpenses}</p>
+                    <p className="text-4xl font-bold text-red-400">
+                      {formatCurrency(totalExpenses)}
+                    </p>
                   </div>
 
                   <div className="space-y-3">
@@ -401,6 +598,15 @@ export default function Dashboard() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4 }}
           >
+            {wellnessLoading && (
+              <p className="text-gray-300 text-sm mb-4">
+                Analyzing your financial wellness based on your recent income and expenses...
+              </p>
+            )}
+            {wellnessError && (
+              <p className="text-red-400 text-sm mb-4">{wellnessError}</p>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Card 1 */}
               <motion.div
@@ -410,8 +616,24 @@ export default function Dashboard() {
               >
                 <h2 className="text-xl font-semibold mb-4">Savings Rate</h2>
                 <p className="text-gray-300 text-sm">
-                  Track how much of your income you're saving
+                  {wellness
+                    ? `Overall score: ${
+                        wellness.financial_wellness_score ?? "—"
+                      }/100 (${wellness.level || "—"})`
+                    : "Track how much of your income you're saving"}
                 </p>
+                {wellness && (
+                  <p className="text-xs text-gray-400 mt-3">
+                    Stress index:{" "}
+                    <span className="font-semibold">
+                      {wellness.financial_stress_index || "—"}
+                    </span>{" "}
+                    • Risk profile:{" "}
+                    <span className="font-semibold">
+                      {wellness.risk_profile || "—"}
+                    </span>
+                  </p>
+                )}
               </motion.div>
 
               {/* Card 2 */}
@@ -421,9 +643,24 @@ export default function Dashboard() {
                 transition={{ duration: 0.3 }}
               >
                 <h2 className="text-xl font-semibold mb-4">Budget Health</h2>
-                <p className="text-gray-300 text-sm">
-                  Monitor your spending against your budget
+                <p className="text-gray-300 text-sm mb-3">
+                  {wellness
+                    ? "Top budget and spending risks identified from your recent activity:"
+                    : "Monitor your spending against your budget"}
                 </p>
+                {wellness && (
+                  <ul className="list-disc list-inside text-xs text-gray-400 space-y-1">
+                    {(wellness.identified_risks || [])
+                      .slice(0, 3)
+                      .map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    {(!wellness.identified_risks ||
+                      wellness.identified_risks.length === 0) && (
+                      <li>No major risks detected from current data.</li>
+                    )}
+                  </ul>
+                )}
               </motion.div>
 
               {/* Card 3 */}
@@ -433,9 +670,39 @@ export default function Dashboard() {
                 transition={{ duration: 0.3 }}
               >
                 <h2 className="text-xl font-semibold mb-4">Financial Goals</h2>
-                <p className="text-gray-300 text-sm">
-                  Set and track your financial objectives
+                <p className="text-gray-300 text-sm mb-3">
+                  {wellness
+                    ? "Personalized, measurable actions to improve and scale your finances:"
+                    : "Set and track your financial objectives"}
                 </p>
+                {wellness && (
+                  <div className="space-y-3 text-xs text-gray-400">
+                    <div>
+                      <p className="font-semibold text-purple-200 mb-1">
+                        Next 30 days
+                      </p>
+                      <ul className="list-disc list-inside space-y-1">
+                        {(wellness.short_term_action_plan || [])
+                          .slice(0, 3)
+                          .map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-purple-200 mb-1">
+                        1–5 year outlook
+                      </p>
+                      <ul className="list-disc list-inside space-y-1">
+                        {(wellness.long_term_action_plan || [])
+                          .slice(0, 3)
+                          .map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             </div>
           </motion.div>
@@ -484,6 +751,13 @@ export default function Dashboard() {
                   className="hidden"
                 />
               </div>
+
+              {billMessage && (
+                <p className="text-sm text-green-400 mb-4">{billMessage}</p>
+              )}
+              {billError && (
+                <p className="text-sm text-red-400 mb-4">{billError}</p>
+              )}
 
               {/* Uploaded Bills Preview */}
               {uploadedBills.length > 0 && (
@@ -562,12 +836,18 @@ export default function Dashboard() {
                 <input
                   ref={salaryFileInputRef}
                   type="file"
-                  multiple
                   accept="image/*,.pdf"
                   onChange={handleSalaryUpload}
                   className="hidden"
                 />
               </div>
+
+              {salaryMessage && (
+                <p className="text-sm text-green-400 mb-4">{salaryMessage}</p>
+              )}
+              {salaryError && (
+                <p className="text-sm text-red-400 mb-4">{salaryError}</p>
+              )}
 
               {/* Uploaded Salary Slips Preview */}
               {uploadedSalary.length > 0 && (
@@ -913,8 +1193,12 @@ export default function Dashboard() {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">User Name</h3>
-                    <p className="text-gray-400">user@example.com</p>
+                    <h3 className="text-lg font-semibold">
+                      {user?.full_name || "User Name"}
+                    </h3>
+                    <p className="text-gray-400">
+                      {user?.email || "user@example.com"}
+                    </p>
                   </div>
                 </div>
 
@@ -925,6 +1209,7 @@ export default function Dashboard() {
                     <input
                       type="text"
                       placeholder="Enter your full name"
+                      defaultValue={user?.full_name || ""}
                       className="w-full bg-purple-900/20 border border-purple-500/30 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-400"
                     />
                   </div>
@@ -934,6 +1219,7 @@ export default function Dashboard() {
                     <input
                       type="email"
                       placeholder="Enter your email"
+                      defaultValue={user?.email || ""}
                       className="w-full bg-purple-900/20 border border-purple-500/30 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-400"
                     />
                   </div>
